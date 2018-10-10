@@ -4,6 +4,8 @@
 typedef struct FilterInfo {
 	int nx, ny;
 	double *x, *y;
+	int nc, nd;
+	double *c, *d;
 } FilterInfo;
 
 enum {
@@ -15,6 +17,8 @@ enum {
 };
 
 int init(FilterInfo *filterInfo, double fs, double f1, double f2, int type, int order);
-double filter(FilterInfo *filterInfo, double *y);
+double filter_sample(FilterInfo *filterInfo, const double *y);
+int filter_batch(FilterInfo *filterInfo, const double *y, const int n, double *y_out);
+int close(FilterInfo *filterInfo);
 
 #endif
