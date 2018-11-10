@@ -10,5 +10,8 @@ project(filters)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -pthread -m64")
 include_directories(include)
 
-set(SOURCE_FILES src/filter.cpp)
-add_library(filters src/filters.cpp)
+set(SOURCE_FILES src/filters.cpp)
+add_library(filters SHARED ${SOURCE_FILES})
+
+add_executable(lowpass examples/lowpass.c)
+target_link_libraries(lowpass filters)

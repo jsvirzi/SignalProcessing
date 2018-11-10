@@ -1,5 +1,7 @@
 #include <math.h>
 #include <malloc.h>
+#include <stdint.h>
+#include <string.h>
 
 #include "filters.h"
 
@@ -97,7 +99,7 @@ static double *dcof_bwlp( int n, double fcf )
     for(k = 3; k <= n; ++k) {
         dcof[k] = dcof[2 * k - 2];
     }
-    return( dcof );
+    return dcof;
 }
 
 /**********************************************************************
@@ -108,7 +110,7 @@ static double *dcof_bwlp( int n, double fcf )
 
 static double *dcof_bwhp( int n, double fcf )
 {
-    return(dcof_bwlp(n, fcf));
+    return dcof_bwlp(n, fcf);
 }
 /**********************************************************************
   ccof_bwlp - calculates the c coefficients for a butterworth lowpass
@@ -116,7 +118,7 @@ static double *dcof_bwhp( int n, double fcf )
 
 */
 
-static double *ccof_bwlp( int n )
+static double *ccof_bwlp(int n)
 {
     double *ccof;
     int m;
@@ -136,7 +138,7 @@ static double *ccof_bwlp( int n )
     ccof[n-1] = n;
     ccof[n] = 1;
 
-    return(ccof);
+    return ccof;
 }
 
 /**********************************************************************
@@ -153,22 +155,127 @@ static double *ccof_bwhp(int n)
     ccof = ccof_bwlp( n );
     if (ccof == NULL) return(NULL);
 
-    for( i = 0; i <= n; ++i)
-        if( i % 2 ) ccof[i] = -ccof[i];
+    for(i = 0; i <= n; ++i)
+        if (i % 2) ccof[i] = -ccof[i];
 
     return(ccof);
 }
 
-int init(FilterInfo *filterInfo, double fs, double f1, double f2, int type, int order) {
-
-    double r_cutoff = M_PI * f1 / fs;
-    filterInfo->d = dcof_bwlp(order, r_cutoff);
-    filterInfo->c = ccof_bwlp(order);
+static uint32_t upper_power_of_two(uint32_t v)
+{
+    v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v++;
+    return v;
 }
 
-double filter(struct FilterInfo *filterInfo, double *y) {
+static double filter_sample(struct FilterInfo *filterInfo, const double x) {
+    double accC = x, accD = 0.0;
+    uint32_t idx = filterInfo->queue_head;
+    uint32_t idx0 = idx;
+    filterInfo->x[idx0] = x;
+    uint32_t mask = filterInfo->queue_mask;
+    filterInfo->queue_head = (filterInfo->queue_head + 1) & mask;
+    double *c = filterInfo->c, *d = filterInfo->d, *px = filterInfo->x, *py = filterInfo->y;
+    for (unsigned int i = 0; i < filterInfo->nc; ++i) {
+        accC = accC + c[i] * px[idx];
+        accD = accD + d[i] * py[idx];
+        idx = (idx - 1) & mask;
+    }
+    double y = accD - accC;
+    filterInfo->y[idx0] = y;
+    return y;
 }
 
-int close() {
+static void filter_batch(FilterInfo *filterInfo, const double *x, const int n, double *y) {
+    for (int i = 0; i < n; ++i) {
+        y[i] = filter_sample(filterInfo, x[i]);
+    }
+}
 
+static double filter_amplitude(FilterInfo *filterInfo, const double f, const unsigned int runTime) {
+    /* use of filter is invasive. make individual copies for each real and imaginary component */
+    FilterInfo filterInfoR, filterInfoI;
+    filterInfoR = *filterInfo;
+    filterInfoI = *filterInfo;
+
+    double dt = 1.0 / filterInfo->fs;
+    double phase0 = 0.25 * M_PI;
+    double aR = cos(phase0), aI = sin(phase0);
+    double accR = aR * aR, accI = aI * aI;
+    unsigned int i, startUpTime = runTime / 10;
+    for (i = 1; i < startUpTime; ++i) {
+        const double theta = i * dt;
+        const double c = cos(theta + phase0);
+        const double s = sin(theta + phase0);
+        aR = filterInfoR.sample(&filterInfoR, c);
+        aI = filterInfoI.sample(&filterInfoI, s);
+    }
+    for (; i < runTime; ++i) {
+        const double theta = i * dt;
+        const double c = cos(theta + phase0);
+        const double s = sin(theta + phase0);
+        aR = filterInfoR.sample(&filterInfoR, c);
+        aI = filterInfoI.sample(&filterInfoI, s);
+        accR += (aR * aR);
+        accI += (aI * aI);
+    }
+    double phase = atan2(aI, aR);
+    return (phase - phase0);
+}
+
+static double filter_phase(FilterInfo *filterInfo, const double f, unsigned int runTime) {
+    /* use of filter is invasive. make individual copies for each real and imaginary component */
+    FilterInfo filterInfoR, filterInfoI;
+    filterInfoR = *filterInfo;
+    filterInfoI = *filterInfo;
+
+    double dt = 1.0 / filterInfo->fs;
+    double phase0 = 0.25 * M_PI;
+    double omega = M_PI * f;
+    double aR = cos(phase0), aI = sin(phase0);
+    for (unsigned int i = 1; i < runTime; ++i) {
+        const double theta = omega * i * dt;
+        const double c = cos(theta + phase0);
+        const double s = sin(theta + phase0);
+        aR = filterInfoR.sample(&filterInfoR, c);
+        aI = filterInfoI.sample(&filterInfoI, s);
+    }
+    double phase = atan2(aI, aR);
+    return (phase - phase0);
+}
+
+static int filter_close(FilterInfo *filterInfo) {
+    free (filterInfo->x);
+    free (filterInfo->y);
+    free (filterInfo->c);
+    free (filterInfo->d);
+}
+
+int filter_init(FilterInfo *filterInfo) {
+    double r_cutoff = M_PI * filterInfo->f1 / filterInfo->fs;
+    switch (filterInfo->options & FilterTypeMask) {
+    case FilterTypeLowPass:
+        filterInfo->c = ccof_bwlp(filterInfo->order);
+        filterInfo->d = dcof_bwlp(filterInfo->order, r_cutoff);
+        filterInfo->ni = 0;
+        filterInfo->queue_size = upper_power_of_two(filterInfo->order + 1) * 2;
+        filterInfo->x = (double *) calloc(filterInfo->queue_size, sizeof(double));
+        filterInfo->y = (double *) calloc(filterInfo->queue_size, sizeof(double));
+        filterInfo->queue_mask = filterInfo->queue_size - 1;
+        filterInfo->queue_head = 0;
+        filterInfo->batch = filter_batch;
+        filterInfo->sample = filter_sample;
+        filterInfo->amplitude = filter_amplitude;
+        filterInfo->phase = filter_phase;
+        filterInfo->close = filter_close;
+        break;
+    default:
+        break;
+    }
+    return 0;
 }
