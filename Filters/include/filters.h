@@ -16,7 +16,7 @@ typedef struct FilterInfo {
 
     /* internal */
 	int nx, ny;
-	double *x, *y;
+	double *x, *y, sf;
 	int nc, nd;
 	double *c, *d;
 	int ni;
@@ -26,9 +26,10 @@ typedef struct FilterInfo {
 	int (*init)(struct FilterInfo *filterInfo, double fs, double f1, double f2, int type, int order);
 	double (*sample)(struct FilterInfo *filterInfo, const double x);
 	void (*batch)(struct FilterInfo *filterInfo, const double *x, const int n, double *y);
-	double (*amplitude)(struct FilterInfo *filterInfo, const double f, const unsigned int run_length);
+	double (*amplitude)(const struct FilterInfo *filterInfo, const double f, const unsigned int run_length);
 	double (*phase)(struct FilterInfo *filterInfo, const double f, unsigned int run_length);
 	int (*close)(struct FilterInfo *filterInfo);
+	void (*print)(struct FilterInfo *filterInfo);
 
 } FilterInfo;
 
