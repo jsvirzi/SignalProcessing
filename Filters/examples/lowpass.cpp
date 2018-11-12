@@ -13,61 +13,46 @@
 int main(int argc, char **argv) {
 
     /* initialize filter(s). running two instances simultaneously */
-    FilterInfo filterInfoR, filterInfoI;
-    memset(&filterInfoR, 0, sizeof(FilterInfo));
-    memset(&filterInfoI, 0, sizeof(FilterInfo));
-    filterInfoR.options = FilterTypeLowPass | FilterVariantButterworth | FilterImplementationIIR;
-    filterInfoI.options = FilterTypeLowPass | FilterVariantButterworth | FilterImplementationIIR;
-    filterInfoR.order = filterInfoI.order = 2;
+    FilterInfo filterInfo;
+    memset(&filterInfo, 0, sizeof(FilterInfo));
+    filterInfo.options = FilterTypeLowPass | FilterVariantButterworth | FilterImplementationIIR;
     double cornerFrequency = 200.0;
     double samplingFrequency = 1000.0;
-    filterInfoR.fs = filterInfoI.fs = samplingFrequency;
-    filterInfoR.f1 = filterInfoI.f1 = cornerFrequency;
-    filter_init(&filterInfoR);
-    filter_init(&filterInfoI);
+    filterInfo.order = 2;
+    filterInfo.fs = samplingFrequency;
+    filterInfo.f1 = cornerFrequency;
+    filter_init(&filterInfo);
+    filterInfo.print(&filterInfo);
 
-    filterInfoR.print(&filterInfoR);
-    filterInfoI.print(&filterInfoI);
+    FILE *fp = fopen("filter_response.txt", "w");
 
     /* generate input samples, at different frequencies, and run filter on them */
-
-    unsigned int runLength = 1000; /* let filter run for 5 seconds at 200Hz */
-    unsigned int steadyStatePoint = 100; /* let filter run for a little bit before start to analyze */
-    for (double frequency = 0.0; frequency < samplingFrequency; frequency += 1.0) {
-
+    /* TODO how large do arguments get before bad things happen? */
+    const double stopAngle = 100.0 * 2.0 * M_PI; /* run for 100 cycles */
+    const double steadyStateAngle = 10.0 * 2.0 * M_PI; /* let filter run for 10 cycles before analysis */
+    /* TODO DC has to be handled differently. not in a loop */
+    for (double frequency = 1.0; frequency < samplingFrequency; frequency += 1.0) {
         double accSR = 0.0, accSI = 0.0, accFR = 0.0, accFI = 0.0;
         double acc2SR = 0.0, acc2SI = 0.0, acc2FR = 0.0, acc2FI = 0.0;
+        double acc2R = 0.0, acc2I = 0.0;
         double dp = 2.0 * M_PI * frequency / samplingFrequency;
-        for (unsigned int i = 0; i < runLength; ++i) {
-            double arg = i * dp;
-
-            double so, si = cos(arg); /* TODO how large do arguments get before bad things happen? */
-            so = filterInfoR.sample(&filterInfoR, si);
-            if (i >= steadyStatePoint) {
-                accSR = accSR + si;
-                acc2SR = acc2SR + si * si;
-                accFR = accFR + so;
-                acc2FR = acc2FR + so * so;
+        for (double arg = 0.0; arg < stopAngle; arg += dp) {
+            double sr = cos(arg), si = sin(arg);
+            double fr = filterInfo.sample(&filterInfo, sr);
+            if (arg >= steadyStateAngle) {
+                accSR = accSR + sr;
+                acc2SR = acc2SR + sr * sr;
+                accFR = accFR + fr;
+                acc2FR = acc2FR + fr * fr;
+                acc2R = acc2R + fr * sr;
+                acc2I = acc2I + fr * si;
             }
-
-//            si = sin(arg);
-//            so = filterInfoI.sample(&filterInfoI, si);
-//            if (i > steadyStatePoint) {
-//                accSI = accSI + si;
-//                acc2SI = acc2SI + si * si;
-//                accFI = accFI + so;
-//                acc2FI = acc2FI + so * so;
-//            }
         }
 
-//        double phaseS = atan2(accSI, accSR);
-//        double phaseF = atan2(accFI, accFR);
-//        double phase = phaseS - phaseF;
-        double ampR = sqrt(acc2FR / acc2SR);
-//        double ampI = sqrt(acc2FI / acc2SI);
-        // double phase = filterInfoR.phase(&filterInfoR, frequency, runLength);
-//        printf("phase response at frequency = %f is %f radians. amp = %f, %f\n", frequency, phase, ampR, ampI);
-        printf("amplitude response = %f at frequency=%f\n", ampR, frequency);
+        double amp = sqrt(acc2FR / acc2SR);
+        double phase = atan2(acc2I, acc2R) / M_PI;
+        printf("frequency=%8.f response: amplitude=%10.7f/phase=%10.7f\n", frequency, amp, phase);
+        fprintf(fp, "%f,%f,%f\n", frequency, amp, phase);
         getchar();
     }
 }
