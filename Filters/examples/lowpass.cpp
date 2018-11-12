@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
 
         double accSR = 0.0, accSI = 0.0, accFR = 0.0, accFI = 0.0;
         double acc2SR = 0.0, acc2SI = 0.0, acc2FR = 0.0, acc2FI = 0.0;
-        double dp = frequency / samplingFrequency;
+        double dp = 2.0 * M_PI * frequency / samplingFrequency;
         for (unsigned int i = 0; i < runLength; ++i) {
             double arg = i * dp;
 
@@ -50,23 +50,24 @@ int main(int argc, char **argv) {
                 acc2FR = acc2FR + so * so;
             }
 
-            si = sin(arg);
-            so = filterInfoI.sample(&filterInfoI, si);
-            if (i > steadyStatePoint) {
-                accSI = accSI + si;
-                acc2SI = acc2SI + si * si;
-                accFI = accFI + so;
-                acc2FI = acc2FI + so * so;
-            }
+//            si = sin(arg);
+//            so = filterInfoI.sample(&filterInfoI, si);
+//            if (i > steadyStatePoint) {
+//                accSI = accSI + si;
+//                acc2SI = acc2SI + si * si;
+//                accFI = accFI + so;
+//                acc2FI = acc2FI + so * so;
+//            }
         }
 
-        double phaseS = atan2(accSI, accSR);
-        double phaseF = atan2(accFI, accFR);
-        double phase = phaseS - phaseF;
+//        double phaseS = atan2(accSI, accSR);
+//        double phaseF = atan2(accFI, accFR);
+//        double phase = phaseS - phaseF;
         double ampR = sqrt(acc2FR / acc2SR);
-        double ampI = sqrt(acc2FI / acc2SI);
+//        double ampI = sqrt(acc2FI / acc2SI);
         // double phase = filterInfoR.phase(&filterInfoR, frequency, runLength);
-        printf("phase response at frequency = %f is %f radians. amp = %f, %f\n", frequency, phase, ampR, ampI);
+//        printf("phase response at frequency = %f is %f radians. amp = %f, %f\n", frequency, phase, ampR, ampI);
+        printf("amplitude response = %f at frequency=%f\n", ampR, frequency);
         getchar();
     }
 }

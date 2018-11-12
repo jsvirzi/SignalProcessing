@@ -212,10 +212,21 @@ static double filter_sample(struct FilterInfo *filterInfo, const double x) {
     filterInfo->queue_head = (filterInfo->queue_head + 1) & mask;
     double *c = filterInfo->c, *d = filterInfo->d, *px = filterInfo->x, *py = filterInfo->y;
     if (filterInfo->nc == filterInfo->nd) {
+//        double C1 = c[1];
+//        double C2 = c[2];
+//        double D1 = d[1];
+//        double D2 = d[2];
+//        double px1 = filterInfo->x[(idx0 - 1) & mask];
+//        double px2 = filterInfo->x[(idx0 - 2) & mask];
+//        double py1 = filterInfo->y[(idx0 - 1) & mask];
+//        double py2 = filterInfo->y[(idx0 - 2) & mask];
+//        printf("X=(%10.6lf,%10.6lf) Y=(%10.6lf,%10.6lf) C=(%lf,%12lf) D=(%lf,%lf)\n", px1, px2, py1, py2, C1, C2, D1, D2);
+//        double py0 = x + C1 * px1 + C2 * px2 + D1 * py1 + D2 * py2;
         for (unsigned int i = 1; i < filterInfo->nc; ++i) {
             idx = (idx - 1) & mask;
             y = y + c[i] * px[idx] + d[i] * py[idx];
         }
+//        printf("compare py2=%lf to %lf\n", py0, y);
         filterInfo->y[idx0] = y;
     }
     return y;
@@ -297,6 +308,7 @@ int filter_init(FilterInfo *filterInfo) {
         filterInfo->c = ccof_bwlp(filterInfo->order);
         filterInfo->d = dcof_bwlp(filterInfo->order, 2.0 * filterInfo->f1 / filterInfo->fs);
         filterInfo->sf = sf_bwlp(filterInfo->order, 2.0 * filterInfo->f1 / filterInfo->fs);
+//        filterInfo->sf = 1.0; /* TODO jsv */
         filterInfo->nc = filterInfo->order + 1;
         filterInfo->nd = filterInfo->order + 1;
         /* the d coefficients are calculated with a negative sign relative to canonical form */
