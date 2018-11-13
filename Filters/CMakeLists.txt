@@ -15,3 +15,6 @@ add_library(filters SHARED ${SOURCE_FILES})
 
 add_executable(lowpass examples/lowpass.cpp)
 target_link_libraries(lowpass filters)
+
+add_executable(minimal examples/minimal.cpp)
+target_link_libraries(minimal filters)
