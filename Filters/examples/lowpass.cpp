@@ -1,24 +1,42 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 
 #include "filters.h"
 
 /*
  * this serves as an example of usage of filters library
  *
- *
  */
 
 int main(int argc, char **argv) {
+
+    double cornerFrequency = 100.0;
+    double samplingFrequency = 1000.0;
+    int filterOrder = 2;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-fc") == 0) {
+            cornerFrequency = strtod(argv[++i], NULL);
+        } else if (strcmp(argv[i], "-fs") == 0) {
+            samplingFrequency = strtod(argv[++i], NULL);
+        } else if (strcmp(argv[i], "-order") == 0) {
+            filterOrder = atoi(argv[++i]);
+        }
+    }
+
+    /* TODO how large can arguments (to sin() and cos()) get before bad things happen? */
+    const double nyquistFrequency = samplingFrequency * 0.5;
+    const double stopCycles = 100.0; /* run for 100 cycles */
+    const double steadyStateCycles = 10.0; /* how many cycles to achieve steady state */
+    const double stopAngle = (stopCycles + steadyStateCycles) * 2.0 * M_PI;
+    const double steadyStateAngle = steadyStateCycles * 2.0 * M_PI; /* let filter run for 10 cycles before analysis */
 
     /* initialize filter(s). running two instances simultaneously */
     FilterInfo filterInfo;
     memset(&filterInfo, 0, sizeof(FilterInfo));
     filterInfo.options = FilterTypeLowPass | FilterVariantButterworth | FilterImplementationIIR;
-    double cornerFrequency = 200.0;
-    double samplingFrequency = 1000.0;
-    filterInfo.order = 2;
+    filterInfo.order = filterOrder;
     filterInfo.fs = samplingFrequency;
     filterInfo.f1 = cornerFrequency;
     filter_init(&filterInfo);
@@ -27,11 +45,7 @@ int main(int argc, char **argv) {
     FILE *fp = fopen("filter_response.txt", "w");
 
     /* generate input samples, at different frequencies, and run filter on them */
-    /* TODO how large do arguments get before bad things happen? */
-    const double stopAngle = 100.0 * 2.0 * M_PI; /* run for 100 cycles */
-    const double steadyStateAngle = 10.0 * 2.0 * M_PI; /* let filter run for 10 cycles before analysis */
-    /* TODO DC has to be handled differently. not in a loop */
-    for (double frequency = 1.0; frequency < samplingFrequency; frequency += 1.0) {
+    for (double frequency = 1.0; frequency < nyquistFrequency; frequency += 1.0) {
         double accSR = 0.0, accSI = 0.0, accFR = 0.0, accFI = 0.0;
         double acc2SR = 0.0, acc2SI = 0.0, acc2FR = 0.0, acc2FI = 0.0;
         double acc2R = 0.0, acc2I = 0.0;
@@ -53,7 +67,6 @@ int main(int argc, char **argv) {
         double phase = atan2(acc2I, acc2R) / M_PI;
         printf("frequency=%8.f response: amplitude=%10.7f/phase=%10.7f\n", frequency, amp, phase);
         fprintf(fp, "%f,%f,%f\n", frequency, amp, phase);
-        getchar();
+        // getchar();
     }
 }
-
